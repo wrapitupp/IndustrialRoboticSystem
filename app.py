@@ -1,14 +1,16 @@
 # app.py
-# Part b) + Part c) - Software application + Event driven database integration
+# Full integration: GUI + Robot + Database + PyBullet Simulator
 
 import tkinter as tk
 from tkinter import messagebox
 from robot import IndustrialRobot
 from database import RobotDatabase
+from simulator import RobotSimulator
 
 # --- Setup ---
 robot = IndustrialRobot("RoboArm-1")
 db = RobotDatabase()
+sim = RobotSimulator()  # This opens the 3D window immediately!
 
 # --- Main Window ---
 window = tk.Tk()
@@ -32,7 +34,7 @@ status_label = tk.Label(window, textvariable=status_var,
                         wraplength=460, pady=8)
 status_label.pack(fill="x", padx=20)
 
-# --- Function to refresh status display ---
+# --- Refresh Status ---
 def refresh_status():
     s = robot.get_status()
     holding = s["holding"] if s["holding"] else "Nothing"
@@ -42,14 +44,14 @@ def refresh_status():
         f"Holding: {holding}"
     )
 
-# --- Log Box function (defined early so other functions can use it) ---
+# --- Log function ---
 def log(message):
     log_box.config(state="normal")
     log_box.insert("end", f"→ {message}\n")
     log_box.see("end")
     log_box.config(state="disabled")
 
-# --- Section: Move Robot ---
+# --- Move Robot ---
 move_frame = tk.LabelFrame(window, text=" Move Robot ",
                             bg="#1e1e2e", fg="#89b4fa",
                             font=("Arial", 11, "bold"), padx=10, pady=10)
@@ -71,7 +73,8 @@ def move_robot():
         x = int(coords["X"].get())
         y = int(coords["Y"].get())
         z = int(coords["Z"].get())
-        robot.move_to(x, y, z)
+        robot.move_to(x, y, z)       # Update robot state
+        sim.move_to(x, y, z)         # Move 3D arm!
         refresh_status()
         db.log_event("MOVE", f"Moved to ({x},{y},{z})", robot.position, "success")
         log(f"Moved to ({x}, {y}, {z})")
@@ -83,7 +86,7 @@ tk.Button(move_frame, text="▶ Move Robot",
           bg="#89b4fa", fg="#1e1e2e",
           font=("Arial", 10, "bold"), pady=5).pack(pady=5)
 
-# --- Section: Pick Item ---
+# --- Pick Item ---
 pick_frame = tk.LabelFrame(window, text=" Pick Item ",
                             bg="#1e1e2e", fg="#a6e3a1",
                             font=("Arial", 11, "bold"), padx=10, pady=10)
@@ -100,8 +103,9 @@ def pick_item():
         return
     result = robot.pick(item)
     if not result:
-        messagebox.showwarning("Warning", f"Robot is already holding: {robot.holding_item}")
+        messagebox.showwarning("Warning", f"Already holding: {robot.holding_item}")
     else:
+        sim.pick(item)               # 3D arm picks!
         db.log_event("PICK", f"Picked {item}", robot.position, "success")
         log(f"Picked up: {item}")
     refresh_status()
@@ -111,7 +115,7 @@ tk.Button(pick_frame, text="🤏 Pick",
           bg="#a6e3a1", fg="#1e1e2e",
           font=("Arial", 10, "bold")).pack(side="left", padx=5)
 
-# --- Section: Place Item ---
+# --- Place Item ---
 place_frame = tk.LabelFrame(window, text=" Place Item ",
                              bg="#1e1e2e", fg="#f38ba8",
                              font=("Arial", 11, "bold"), padx=10, pady=10)
@@ -122,7 +126,8 @@ def place_item():
     if not result:
         messagebox.showwarning("Warning", "Robot is not holding anything!")
     else:
-        db.log_event("PLACE", f"Placed item at {robot.position}", robot.position, "success")
+        sim.place()                  # 3D arm places!
+        db.log_event("PLACE", f"Placed at {robot.position}", robot.position, "success")
         log(f"Placed item at {robot.position}")
     refresh_status()
 
@@ -141,14 +146,15 @@ log_box = tk.Text(log_frame, height=6, bg="#181825",
                   fg="#cdd6f4", font=("Courier", 9), state="disabled")
 log_box.pack(fill="both", expand=True)
 
-# --- Close database when window is closed ---
+# --- Close everything cleanly ---
 def on_close():
     db.close()
+    sim.disconnect()    # Close 3D window too
     window.destroy()
 
 window.protocol("WM_DELETE_WINDOW", on_close)
 
-log("Robot app started. Ready for commands.")
+log("Robot app started with PyBullet simulation!")
 
-# --- Start App ---
+# --- Start ---
 window.mainloop()
